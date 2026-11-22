@@ -8,27 +8,21 @@ first to know, with a clear next step: on the phone, by voice, in a push notific
 
 ## Architecture
 
-```
- Official timetable (GTFS) + real-time (GTFS-RT) + SBB alerts + MeteoSwiss
-                                   │
-                                   ▼
- ┌──────────────────────────────────────────────────────────┐
- │ sbb-twin: live digital twin of every Swiss train         │ ◀── control console: closures, breakdowns,
- │ 1 position/s per train on the real track geometry        │     storms, incidents, train control
- └──────────────────────────────────────────────────────────┘
-                 │ MQTT (retained state, QoS 1)          │ HTTP (planner, situation, geometry)
-                 ▼                                       ▼
- ┌──────────────────────────────────────────────────────────┐      ┌────────────────────────────┐
- │ ktor_app: Takt backend (Kotlin / Ktor)                   │      │ sbb-twin-mcp               │
- │ live state in memory · incident history in SQLite        │ ───▶ │ read-only MCP server for   │
- │ REST API v1 · WebSockets · push · route planner · auth   │      │ ChatGPT, Claude, Codex     │
- │ Claude travel assistant · ElevenLabs voice               │      └────────────────────────────┘
- └──────────────────────────────────────────────────────────┘
-        │                 │                     │
-        ▼                 ▼                     ▼
-  Passenger web app   Android / iOS apps   ktor-stationscreen
-  + staff panel       (Capacitor)          ESP32 station screens running Kotlin
-```
+![LauzTakt architecture](architecture.png)
+
+Everything runs on one cloud server (Hetzner):
+
+- **Digital Twin Simulator** ([sbb-twin](https://github.com/LauzTakt/sbb-twin)) replays the official real-time API on
+  the real track geometry, works with a **forecast model**, and publishes the state of the network over **MQTT**.
+- **Ktor app** ([ktor_app](https://github.com/LauzTakt/ktor_app)) consumes MQTT, keeps historical incidents in
+  **SQLite**, and serves REST, WebSockets and the web server for the **Android**, **iOS** and **web browser** clients.
+  It uses third-party tools: **ElevenLabs** (TTS), the **Claude API** (LLM assistant) and **Firebase** (push).
+- **Grafana** monitors the app.
+- **MCP** ([sbb-twin-mcp](https://github.com/LauzTakt/sbb-twin-mcp)) exposes the network to third-party clients
+  such as ChatGPT and other LLMs.
+- **ESP32 station screens** ([ktor-stationscreen](https://github.com/LauzTakt/ktor-stationscreen)): the
+  Kotlin2ESP tool compiles a Kotlin app and sends it to the board over serial; the board reads the Ktor app over HTTP
+  and shows the station's train data on an ILI9341 display (also emulated).
 
 Side project for the AXA challenge: **railsight** rates the natural-hazard exposure of every kilometre of Swiss
 standard-gauge track from aerial data, for about $0.12 in model costs.
@@ -52,7 +46,7 @@ standard-gauge track from aerial data, for about $0.12 in model costs.
 - **Mobile:** Capacitor (Android and iOS), Web Push (VAPID), Firebase Cloud Messaging, App Links / Universal Links
 - **AI:** Claude (travel assistant, hazard rating), ElevenLabs (voice agent), MCP
 - **Hardware:** ESP32, ILI9341 TFT, PlatformIO, FreeRTOS
-- **Deployment:** Docker, Coolify, GitHub Actions (Android APK and iOS builds)
+- **Deployment and monitoring:** Hetzner, Docker, Coolify, Grafana, GitHub Actions (Android APK and iOS builds)
 
 ## Team
 
